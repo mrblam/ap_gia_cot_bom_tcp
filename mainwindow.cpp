@@ -27,10 +27,10 @@ static uint32_t get_unit_price(QString nozzle_id)
         }
     }
     qry_cmd.clear();
-    qry_cmd.append("SELECT * FROM current_price");
+    qry_cmd.append("SELECT * FROM product");
     query.prepare(qry_cmd);
     if (!query.exec()) {
-        qDebug() << "Select current_price failed:" << query.lastError();
+        qDebug() << "Select product failed:" << query.lastError();
     }
     while(query.next()){
         if(fuel_id == query.value("Mã nhiên liệu").toString()){
@@ -41,10 +41,10 @@ static uint32_t get_unit_price(QString nozzle_id)
     return unit_price;
 }
 
-static void update_current_price(QString price ,QString fuel_id){
+static void update_product(QString price ,QString fuel_id){
     QSqlQuery query;
     QDateTime currentTime = QDateTime::currentDateTime();
-    QString qry_cmd = "UPDATE current_price SET [Đơn giá] = '";
+    QString qry_cmd = "UPDATE product SET [Đơn giá] = '";
     qry_cmd.append(price);
     qry_cmd.append("' ,[Ngày cập nhật] = '");
     qry_cmd.append(currentTime.toString("dd/MM/yyyy hh:mm:ss"));
@@ -53,7 +53,7 @@ static void update_current_price(QString price ,QString fuel_id){
     query.prepare(qry_cmd);
     qDebug()<< qry_cmd;
     if (!query.exec()) {
-        qDebug() << "Insert current_price failed:" << query.lastError();
+        qDebug() << "Insert product failed:" << query.lastError();
     }
 }
 MainWindow::MainWindow(QWidget *parent)
@@ -63,7 +63,7 @@ MainWindow::MainWindow(QWidget *parent)
     QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE");
     QSqlQuery query;
     ui->setupUi(this);
-    ui->release_btn->setEnabled(false);
+    this->setWindowTitle("Phần mềm áp giá vòi bơm");
     db.setDatabaseName("mydatabase.db");
     bool dbExists = QFile::exists("mydatabase.db");
     if(!dbExists){
@@ -72,12 +72,14 @@ MainWindow::MainWindow(QWidget *parent)
         } else {
             qDebug() << QObject::tr("Database is open!");
             query.exec("create table mapping ([Mã vòi] TEXT,[Mã nhiên liệu] TEXT)");
-            query.exec("create table current_price ([Mã nhiên liệu] TEXT,[Tên nhiên liệu] TEXT,[Đơn giá] INT,[Ngày cập nhật] DATETIME)");
+            query.exec("create table product ([Mã nhiên liệu] TEXT,[Tên nhiên liệu] TEXT,[Đơn giá] INT,[Ngày cập nhật] DATETIME)");
             query.exec("create table log_state (Time DATETIME,State TEXT)");
-            query.exec("insert into current_price values(1,'E5',20000,0)");
-            query.exec("insert into current_price values(2,92,20000,0)");
-            query.exec("insert into current_price values(3,'DS',20000,0)");
-            query.exec("insert into current_price values(4,'D001',20000,0)");
+            query.exec("create table tcp ([Host address] TEXT,Port TEXT)");
+            query.exec("insert into tcp values('192.168.3.206','65000')");
+            query.exec("insert into product values(1,'E5',20000,0)");
+            query.exec("insert into product values(2,'A95',20000,0)");
+            query.exec("insert into product values(3,'DS',20000,0)");
+            query.exec("insert into product values(4,'D001',20000,0)");
         }
     }else{
         if (!db.open()) {
@@ -86,6 +88,26 @@ MainWindow::MainWindow(QWidget *parent)
             qDebug() << QObject::tr("Database is open!");
         }
     }
+    /**/
+    query.prepare("SELECT * FROM tcp");
+    if (!query.exec()) {
+        qDebug() << "Select tcp failed:" << query.lastError();
+    }else{
+        if(query.next()){
+            ui->host_address_input->setText(query.value("Host address").toString());
+            ui->host_address_input->setDisabled(true);
+            ui->port_input->setText(query.value("Port").toString());
+            ui->port_input->setEnabled(false);
+        }
+    }
+    /**/
+    ui->nameFuel_input->setEnabled(false);
+    ui->fuelID_input->setEnabled(false);
+    ui->price_input->setEnabled(false);
+    ui->updateProductDone_btn->setEnabled(false);
+    ui->updateMappingDone_btn->setEnabled(false);
+    ui->updateIPDone_btn->setEnabled(false);
+    ui->addFuel_btn->setEnabled(false);
     MainWindow::showCurrentPrice();
 }
 
@@ -97,12 +119,25 @@ MainWindow::~MainWindow()
 void MainWindow::showCurrentPrice()
 {
     static QSqlTableModel *assignNozzleModel = new QSqlTableModel;
-    assignNozzleModel->setTable("current_price");
-    assignNozzleModel->setEditStrategy(QSqlTableModel::OnManualSubmit);
+    assignNozzleModel->setTable("product");
+    assignNozzleModel->setEditStrategy(QSqlTableModel::OnFieldChange);
     assignNozzleModel->select();
-    ui->current_price_table->setModel(assignNozzleModel);
-    ui->current_price_table->resizeColumnsToContents();
-    ui->current_price_table->show();
+//    ui->product_table->model()->index(0,3).
+//    sql_model_->setEditStrategy(QSqlTableModel::OnManualSubmit);
+    ui->product_table->setModel(assignNozzleModel);
+    ui->product_table->resizeColumnsToContents();
+    ui->product_table->show();
+}
+
+void MainWindow::showMapping()
+{
+    static QSqlTableModel *mappingTable = new QSqlTableModel;
+    mappingTable->setTable("mapping");
+    mappingTable->setEditStrategy(QSqlTableModel::OnFieldChange);
+    mappingTable->select();
+    ui->product_table->setModel(mappingTable);
+    ui->product_table->resizeColumnsToContents();
+    ui->product_table->show();
 }
 
 void MainWindow::on_release_btn_clicked()
@@ -112,6 +147,9 @@ void MainWindow::on_release_btn_clicked()
     QString request_cmd;
     QSqlQuery query ;
     QString qry_cmd = "SELECT * FROM mapping";
+    /**/
+    MainWindow::on_set_btn_clicked();
+    /**/
     query.prepare(qry_cmd);
     if (!query.exec()) {
         qDebug() << "Select mapping failed:" << query.lastError();
@@ -140,45 +178,98 @@ void MainWindow::on_set_btn_clicked()
 {
     QSqlQuery query;
     QDateTime currentTime;
-    ui->release_btn->setEnabled(true);
+    QString fuel_id;
+    QString unit_price;
     currentTime = QDateTime::currentDateTime();
     /***********************************************************/
-    if(ui->E5_Price->text() != nullptr){
-        update_current_price(ui->E5_Price->text(),QString::number(1));
-        query.prepare("insert into log_State values (:time,'Set giá E5')");//
+    query.prepare("SELECT * FROM product");
+    if (!query.exec()) {
+        qDebug() << "Select product failed:" << query.lastError();
+    }else{
+        while(query.next()){
+            fuel_id = query.value("Mã nhiên liệu").toString();
+            unit_price = query.value("Đơn giá").toString();
+            update_product(unit_price,fuel_id);
+        }
+        query.prepare("insert into log_State values (:time,'Set giá')");//
             query.bindValue(":time", currentTime.toString("dd/MM/yyyy hh:mm:ss"));
         if (!query.exec()) {
             qDebug() << "Insert log_State failed:" << query.lastError();
         }
     }
-    /***********************************************************/
-    if(ui->D001->text() != nullptr){
-        update_current_price(ui->D001->text(),QString::number(4));
-        query.prepare("insert into log_State values (:time,'Set giá D001')");//
-            query.bindValue(":time", currentTime.toString("dd/MM/yyyy hh:mm:ss"));
-        if (!query.exec()) {
-            qDebug() << "Insert log_State failed:" << query.lastError();
-        }
-    }
-    /***********************************************************/
-    if(ui->DS->text() != nullptr){
-        update_current_price(ui->DS->text(),QString::number(3));
-        query.prepare("insert into log_State values (:time,'Set giá DS')");//
-            query.bindValue(":time", currentTime.toString("dd/MM/yyyy hh:mm:ss"));
-        if (!query.exec()) {
-            qDebug() << "Insert log_State failed:" << query.lastError();
-        }
-    }
-    /***********************************************************/
-    if(ui->x92_price->text() != nullptr){
-        update_current_price(ui->x92_price->text(),QString::number(2));
-        query.prepare("insert into log_State values (:time,'Set giá 92')");//
-            query.bindValue(":time", currentTime.toString("dd/MM/yyyy hh:mm:ss"));
-        if (!query.exec()) {
-            qDebug() << "Insert log_State failed:" << query.lastError();
-        }
-    }
-    /***********************************************************/
     MainWindow::showCurrentPrice();
+}
+
+void MainWindow::on_updateIP_btn_clicked()
+{
+    ui->host_address_input->setEnabled(true);
+    ui->port_input->setEnabled(true);
+    ui->updateIPDone_btn->setEnabled(true);
+}
+
+void MainWindow::on_updateIPDone_btn_clicked()
+{ //UPDATE tcp SET [Host address] = '192.168.1.1' ,[Port] = '24384'
+    QSqlQuery query;
+    QString cmd = "UPDATE tcp SET [Host address] = '";
+    cmd.append(ui->host_address_input->text());
+    cmd.append("',[Port] = '");
+    cmd.append(ui->port_input->text());
+    cmd.append("'");
+    query.prepare(cmd);
+    qDebug()<< cmd;
+    if (!query.exec()) {
+        qDebug() << "UPDATE tcp failed:" << query.lastError();
+    }
+    ui->host_address_input->setEnabled(false);
+    ui->port_input->setEnabled(false);
+    ui->updateIPDone_btn->setEnabled(false);
+}
+
+void MainWindow::on_updateProduct_btn_clicked()
+{
+    ui->fuelID_input->setEnabled(true);
+    ui->nameFuel_input->setEnabled(true);
+    ui->price_input->setEnabled(true);
+    ui->addFuel_btn->setEnabled(true);
+    ui->updateProductDone_btn->setEnabled(true);
+}
+
+void MainWindow::on_updateProductDone_btn_clicked()
+{
+    MainWindow::showCurrentPrice();
+    ui->updateProductDone_btn->setEnabled(false);
+    ui->addFuel_btn->setEnabled(false);
+    ui->nameFuel_input->setEnabled(false);
+    ui->fuelID_input->setEnabled(false);
+    ui->price_input->setEnabled(false);
+}
+
+void MainWindow::on_updateMapping_btn_clicked()
+{
+    MainWindow::showMapping();
+    ui->updateMappingDone_btn->setEnabled(true);
+}
+
+void MainWindow::on_updateMappingDone_btn_clicked()
+{
+    MainWindow::showCurrentPrice();
+    ui->updateMappingDone_btn->setEnabled(false);
+}
+
+void MainWindow::on_addFuel_btn_clicked()
+{//insert into product values(1,'E5',20000,0)
+    QSqlQuery query;
+    QDateTime currentTime = QDateTime::currentDateTime();
+    if(ui->fuelID_input->text() != nullptr && ui->nameFuel_input->text() != nullptr && ui->price_input->text() != nullptr){
+        query.prepare("insert into product values (:fuelID,:name,:price,:time)");//
+        query.bindValue(":fuelID", ui->fuelID_input->text() );
+        query.bindValue(":name", ui->nameFuel_input->text());
+        query.bindValue(":price", ui->price_input->text());
+        query.bindValue(":time", currentTime.toString("dd/MM/yyyy hh:mm:ss"));
+        if (!query.exec()) {
+            qDebug() << "Insert product failed:" << query.lastError();
+        }
+        MainWindow::showCurrentPrice();
+    }
 }
 

@@ -7,6 +7,7 @@ Client::Client(QObject *parent)
 }
 bool Client::requestToServer(QString cmd,QString address,uint32_t port)
 {
+    QByteArray rx_data;
     bool status = false;
     socket = new QTcpSocket(this);
     socket->connectToHost(address, port);//QHostAddress::
@@ -18,14 +19,19 @@ bool Client::requestToServer(QString cmd,QString address,uint32_t port)
         socket->waitForBytesWritten(200);
         if(socket->waitForReadyRead(3000)){
             qDebug() << "Reading: " << socket->bytesAvailable();
-            qDebug() << socket->readAll();
-            status = true;
+            rx_data = socket->readAll();
+            qDebug() << rx_data;
+            if(rx_data == "ACK"){
+                status = true;
+            }else if(rx_data == "NAK"){
+                status = false;
+            }
         }
         socket->close();
     }
     else
     {
-        qDebug() << "Connect false";
+        qDebug() << "Connect false!!!";
         status = false;
     }
     socket->deleteLater();
