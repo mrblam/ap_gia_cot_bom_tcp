@@ -122,8 +122,6 @@ void MainWindow::showCurrentPrice()
     assignNozzleModel->setTable("product");
     assignNozzleModel->setEditStrategy(QSqlTableModel::OnFieldChange);
     assignNozzleModel->select();
-//    ui->product_table->model()->index(0,3).
-//    sql_model_->setEditStrategy(QSqlTableModel::OnManualSubmit);
     ui->product_table->setModel(assignNozzleModel);
     ui->product_table->resizeColumnsToContents();
     ui->product_table->show();
@@ -140,7 +138,7 @@ void MainWindow::showMapping()
     ui->product_table->show();
 }
 
-void MainWindow::on_release_btn_clicked()
+bool MainWindow::on_release_btn_clicked()
 {
     uint32_t unit_price = 0;
     QString nozzle_id;
@@ -148,7 +146,10 @@ void MainWindow::on_release_btn_clicked()
     QSqlQuery query ;
     QString qry_cmd = "SELECT * FROM mapping";
     /**/
-    MainWindow::on_set_btn_clicked();
+    if(!MainWindow::on_set_btn_clicked()){
+        QMessageBox::critical(this,"Error","Đơn giá không hợp lệ!");
+        return false ;
+    }
     /**/
     query.prepare(qry_cmd);
     if (!query.exec()) {
@@ -172,14 +173,16 @@ void MainWindow::on_release_btn_clicked()
     }else{
         QMessageBox::critical(this,"False","Áp giá thất bại!");
     }
+    return true;
 }
 
-void MainWindow::on_set_btn_clicked()
+bool MainWindow::on_set_btn_clicked()
 {
     QSqlQuery query;
     QDateTime currentTime;
     QString fuel_id;
     QString unit_price;
+    bool isValid = true;
     currentTime = QDateTime::currentDateTime();
     /***********************************************************/
     query.prepare("SELECT * FROM product");
@@ -189,6 +192,10 @@ void MainWindow::on_set_btn_clicked()
         while(query.next()){
             fuel_id = query.value("Mã nhiên liệu").toString();
             unit_price = query.value("Đơn giá").toString();
+            unit_price.toInt(&isValid, 10);
+            if(unit_price == '0' || isValid == false){
+                return false;
+            }
             update_product(unit_price,fuel_id);
         }
         query.prepare("insert into log_State values (:time,'Set giá')");//
@@ -198,6 +205,7 @@ void MainWindow::on_set_btn_clicked()
         }
     }
     MainWindow::showCurrentPrice();
+    return true;
 }
 
 void MainWindow::on_updateIP_btn_clicked()

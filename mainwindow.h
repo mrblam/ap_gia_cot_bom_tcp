@@ -18,9 +18,9 @@ public:
     void showCurrentPrice();
     void showMapping();
 private slots:
-    void on_release_btn_clicked();
+    bool on_release_btn_clicked();
 
-    void on_set_btn_clicked();
+    bool on_set_btn_clicked();
 
     void on_updateIP_btn_clicked();
 

@@ -10,7 +10,7 @@ bool Client::requestToServer(QString cmd,QString address,uint32_t port)
     QByteArray rx_data;
     bool status = false;
     socket = new QTcpSocket(this);
-    socket->connectToHost(address, port);//QHostAddress::
+    socket->connectToHost(address, port);
 
     if(socket->waitForConnected(3000))
     {
